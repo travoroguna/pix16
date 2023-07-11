@@ -182,6 +182,31 @@ win32_window_callback(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_param)
                             SWP_NOACTIVATE | SWP_NOZORDER);
         } break;
 
+        case WM_SYSCOMMAND:
+        {
+            switch (w_param)
+            {
+                case SC_SCREENSAVE:
+                case SC_MONITORPOWER: {
+                    // NOTE(nick): this is where we could disallow screen saver and screen blanking
+                    // by not calling the default window proc
+                    return DefWindowProcW(hwnd, message, w_param, l_param);
+                } break;
+
+                // User trying to access application menu using ALT
+                case SC_KEYMENU: {
+                    // NOTE(nick): prevent beep sound when pressing alt key combo (e.g. alt + enter)
+                    return 0;
+                } break;
+                
+                default:
+                {
+                    return DefWindowProcW(hwnd, message, w_param, l_param);
+                } break;
+            }
+        } break;
+
+        case WM_SYSKEYDOWN:
         case WM_KEYDOWN:
         {
             b32 was_down = !!(l_param & (1 << 30));
@@ -190,6 +215,11 @@ win32_window_callback(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_param)
             if (!was_down && is_down)
             {
                 if (w_param == VK_F11)
+                {
+                    win32_toggle_fullscreen(hwnd);
+                }
+
+                if ((GetKeyState(VK_MENU) & 0x8000) && w_param == VK_RETURN)
                 {
                     win32_toggle_fullscreen(hwnd);
                 }
@@ -275,7 +305,7 @@ function f32 process_xinput_stick_value(SHORT value, SHORT deadzone_threshold)
     return result;
 }
 
-function bool process_xinput_button_value(DWORD button_state, DWORD button_bit)
+function b32 process_xinput_button_value(DWORD button_state, DWORD button_bit)
 {
     return (button_state & button_bit) == button_bit;
 }
@@ -311,23 +341,23 @@ function void win32_poll_xinput_controllers(Game_Input *input)
                 b32 success = XInputSetState(index, &vibration) == ERROR_SUCCESS;
             }
 
-            it->up = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_UP);
-            it->down = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_DOWN);
-            it->left = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_LEFT);
-            it->right = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_RIGHT);
+            it->up |= process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_UP);
+            it->down |= process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_DOWN);
+            it->left |= process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_LEFT);
+            it->right |= process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_RIGHT);
 
             f32 stick_x = process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
             f32 stick_y = process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 
-            it->up |= stick_y < 0;
-            it->down |= stick_y > 0;
+            it->up |= stick_y > 0;
+            it->down |= stick_y < 0;
             it->left |= stick_x < 0;
             it->right |= stick_x > 0;
 
-            it->a = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_A);
-            it->b = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_B);
-            it->start = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_START);
-            it->pause = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_BACK);
+            it->a |= process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_A);
+            it->b |= process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_B);
+            it->start |= process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_START);
+            it->pause |= process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_BACK);
 
             controller_connected_frame_index[index] += 1;
         }
