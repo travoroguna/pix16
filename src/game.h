@@ -19,7 +19,6 @@ struct Game_Input
 {
     f32 dt;
     f32 time;
-    Arena *memory;
 
     Controller controllers[4];
 };

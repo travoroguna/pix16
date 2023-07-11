@@ -32,11 +32,29 @@ void DrawRect(Game_Output *out, Rectangle2 rect, Vector4 color)
 
 void GameUpdateAndRender(Game_Input *input, Game_Output *out)
 {
+    static Vector2 pos = {0};
+
+    Controller *ctrl0 = &input->controllers[0];
+    if (ctrl0->right)
+    {
+        pos.x += input->dt * 400;
+    }
+    if (ctrl0->left)
+    {
+        pos.x -= input->dt * 400;
+    }
+    if (ctrl0->up)
+    {
+        pos.y -= input->dt * 400;
+    }
+    if (ctrl0->down)
+    {
+        pos.y += input->dt * 400;
+    }
+
     DrawRect(out, r2(v2(0, 0), v2(out->width, out->height)), v4_green);
 
-    DrawRect(out, r2(v2(0, 0), v2(32, 32)), v4_red);
+    DrawRect(out, r2(pos + v2(0, 0), pos + v2(32, 32)), v4_red);
 
     DrawRect(out, r2(v2(0, 0), v2(1, 1)), v4_green);
-
-    print("down: %d\n", input->controllers[0].down);
 }

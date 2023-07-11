@@ -282,6 +282,8 @@ function bool process_xinput_button_value(DWORD button_state, DWORD button_bit)
 
 function void win32_poll_xinput_controllers(Game_Input *input)
 {
+    static u32 controller_connected_frame_index[4] = {0};
+
     for (u32 index = 0; index < 4; index++)
     {
         Controller *it = &input->controllers[index];
@@ -291,15 +293,47 @@ function void win32_poll_xinput_controllers(Game_Input *input)
         {
             XINPUT_GAMEPAD *pad = &state.Gamepad;
 
+            static u32 vibrate_count = 5;
+            if (controller_connected_frame_index[index] <= vibrate_count)
+            {
+                f32 left_motor = controller_connected_frame_index[index] < vibrate_count ?  0.5 : 0;
+                f32 right_motor = 0;
+
+                Swap(f32, left_motor, right_motor);
+
+                left_motor = Clamp(left_motor, 0, 1);
+                right_motor = Clamp(right_motor, 0, 1);
+
+                XINPUT_VIBRATION vibration = {};
+                vibration.wLeftMotorSpeed  = (u16)(left_motor * U16_MAX);
+                vibration.wRightMotorSpeed = (u16)(right_motor * U16_MAX);
+
+                b32 success = XInputSetState(index, &vibration) == ERROR_SUCCESS;
+            }
+
             it->up = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_UP);
             it->down = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_DOWN);
             it->left = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_LEFT);
             it->right = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_RIGHT);
 
-            // TODO(nick): merge with stick values
-
             f32 stick_x = process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-            f32 stick_Y = process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+            f32 stick_y = process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+
+            it->up |= stick_y < 0;
+            it->down |= stick_y > 0;
+            it->left |= stick_x < 0;
+            it->right |= stick_x > 0;
+
+            it->a = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_A);
+            it->b = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_B);
+            it->start = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_START);
+            it->pause = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_BACK);
+
+            controller_connected_frame_index[index] += 1;
+        }
+        else
+        {
+            controller_connected_frame_index[index] = 0;
         }
     }
 }
@@ -420,7 +454,29 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_inst, LPSTR argv, int ar
         arena_reset(temp_arena());
 
         static Game_Input input = {};
+
+        input.dt = 1.0 / 60.0f;
+        input.time = os_time();
+
+        MemoryZero(&input.controllers, count_of(input.controllers) * sizeof(Controller));
         win32_poll_xinput_controllers(&input);
+
+        {
+            Controller *player0 = &input.controllers[0];
+
+            player0->up    |= (GetKeyState(VK_UP) & (1 << 15)) == (1 << 15);
+            player0->down  |= (GetKeyState(VK_DOWN) & (1 << 15)) == (1 << 15);
+            player0->left  |= (GetKeyState(VK_LEFT) & (1 << 15)) == (1 << 15);
+            player0->right |= (GetKeyState(VK_RIGHT) & (1 << 15)) == (1 << 15);
+
+            player0->up    |= (GetKeyState('W') & (1 << 15)) == (1 << 15);
+            player0->down  |= (GetKeyState('S') & (1 << 15)) == (1 << 15);
+            player0->left  |= (GetKeyState('A') & (1 << 15)) == (1 << 15);
+            player0->right |= (GetKeyState('D') & (1 << 15)) == (1 << 15);
+
+            player0->start |= (GetKeyState(VK_ESCAPE) & (1 << 15)) == (1 << 15);
+            player0->pause |= (GetKeyState('P') & (1 << 15)) == (1 << 15);
+        }
 
         // TODO(nick): also merge keyboard state to players 1 and 2
 
@@ -463,6 +519,8 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_inst, LPSTR argv, int ar
         // @Incomplete: actually do proper frame-rate timing
         os_sleep(16 / 1000.0);
     }
+
+    os_exit(0);
 
     return 0;
 }
