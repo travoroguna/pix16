@@ -32,6 +32,8 @@ static void win32__print(const char *format, ...) {
 #define impl
 #include "third_party/na.h"
 #include "third_party/na_math.h"
+#include "game.h"
+#include "game.cpp"
 
 //
 // NOTE(nick): win32 entry code
@@ -162,7 +164,7 @@ win32_window_callback(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_param)
             int height = (int)(wr.bottom - wr.top);
 
             // NOTE(nick): this will invalidate any drawing that has happened in the window!
-            win32_resize_framebuffer(&win32_framebuffer, width, height);
+            win32_resize_framebuffer(&win32_framebuffer, 320, 240);
 
             return DefWindowProcW(hwnd, message, w_param, l_param);
         } break;
@@ -210,6 +212,101 @@ win32_fatal_assert(b32 cond, char *text) {
     }
 }
 
+//
+// Controllers
+//
+#include <xinput.h>
+
+#define XINPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
+typedef XINPUT_GET_STATE(XInput_Get_State_t);
+
+#define XINPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
+typedef XINPUT_SET_STATE(XInput_Set_State_t);
+
+#define XINPUT_GET_CAPABILITIES(name) DWORD WINAPI name(DWORD dwUserIndex, DWORD dwFlags, XINPUT_CAPABILITIES *pCapabilities)
+typedef XINPUT_GET_CAPABILITIES(XInput_Get_Capabilities_t);
+
+XINPUT_GET_STATE(XInputGetStateStub) { return ERROR_DEVICE_NOT_CONNECTED; }
+XINPUT_SET_STATE(XInputSetStateStub) { return ERROR_DEVICE_NOT_CONNECTED; }
+XINPUT_GET_CAPABILITIES(XInputGetCapabilitiesStub) { return ERROR_DEVICE_NOT_CONNECTED; }
+
+static XInput_Get_State_t *_XInputGetState = XInputGetStateStub;
+static XInput_Set_State_t  *_XInputSetState = XInputSetStateStub;
+static XInput_Get_Capabilities_t  *_XInputGetCapabilities = XInputGetCapabilitiesStub;
+
+#define XInputGetState _XInputGetState
+#define XInputSetState _XInputSetState
+#define XInputGetCapabilities _XInputGetCapabilities
+
+function b32 win32_init_xinput()
+{
+    HMODULE libxinput         = LoadLibraryA("xinput1_4.dll");
+    if (!libxinput) libxinput = LoadLibraryA("xinput9_1_0.dll");
+    if (!libxinput) libxinput = LoadLibraryA("xinput1_3.dll");
+
+    if (!libxinput)
+    {
+        print("[xinput] Failed to load an xinput dll!\n");
+        return false;
+    }
+
+    XInputGetState = (XInput_Get_State_t *)GetProcAddress(libxinput, "XInputGetState");
+    if (!XInputGetState) { XInputGetState = XInputGetStateStub; }
+
+    XInputSetState = (XInput_Set_State_t *)GetProcAddress(libxinput, "XInputSetState");
+    if (!XInputSetState) { XInputSetState = XInputSetStateStub; }
+
+    XInputGetCapabilities = (XInput_Get_Capabilities_t *)GetProcAddress(libxinput, "XInputGetCapabilities");
+    if (!XInputGetCapabilities) { XInputGetCapabilities = XInputGetCapabilitiesStub; }
+
+    return true;
+}
+
+function f32 process_xinput_stick_value(SHORT value, SHORT deadzone_threshold)
+{
+    f32 result = 0;
+
+    if (value < -deadzone_threshold) {
+        result = (f32)((value + deadzone_threshold) / (32768.0f - deadzone_threshold));
+    } else if (value > deadzone_threshold) {
+        result = (f32)((value - deadzone_threshold) / (32767.0f - deadzone_threshold));
+    }
+
+    return result;
+}
+
+function bool process_xinput_button_value(DWORD button_state, DWORD button_bit)
+{
+    return (button_state & button_bit) == button_bit;
+}
+
+function void win32_poll_xinput_controllers(Game_Input *input)
+{
+    for (u32 index = 0; index < 4; index++)
+    {
+        Controller *it = &input->controllers[index];
+
+        XINPUT_STATE state;
+        if (XInputGetState(index, &state) == ERROR_SUCCESS)
+        {
+            XINPUT_GAMEPAD *pad = &state.Gamepad;
+
+            it->up = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_UP);
+            it->down = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_DOWN);
+            it->left = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_LEFT);
+            it->right = process_xinput_button_value(pad->wButtons, XINPUT_GAMEPAD_DPAD_RIGHT);
+
+            // TODO(nick): merge with stick values
+
+            f32 stick_x = process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+            f32 stick_Y = process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+        }
+    }
+}
+
+//
+// Main
+//
 int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_inst, LPSTR argv, int argc)
 {
     os_init();
@@ -301,6 +398,8 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_inst, LPSTR argv, int ar
         SetWindowPos(hwnd, HWND_TOP, center_x, center_y, window_width, window_height, SWP_NOOWNERZORDER);
     }
 
+    win32_init_xinput();
+
     ShowWindow(hwnd, SW_SHOW);
 
     while (true)
@@ -317,14 +416,22 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_inst, LPSTR argv, int ar
             DispatchMessageW(&msg);
         }
 
-        Win32_Framebuffer *framebuffer = &win32_framebuffer;
-        for (i32 y = 0; y < framebuffer->height; y += 1)
-        {
-            for (i32 x = 0; x < framebuffer->width; x += 1)
-            {
-                framebuffer->pixels[y * framebuffer->width + x] = 0xffff0000;
-            }
-        }
+        // NOTE(nick): reset temporary storage
+        arena_reset(temp_arena());
+
+        static Game_Input input = {};
+        win32_poll_xinput_controllers(&input);
+
+        // TODO(nick): also merge keyboard state to players 1 and 2
+
+        static Game_Output output = {};
+        output.pixels = PushArrayZero(temp_arena(), u32, win32_framebuffer.width * win32_framebuffer.height);
+        output.width = win32_framebuffer.width;
+        output.height = win32_framebuffer.height;
+
+        GameUpdateAndRender(&input, &output);
+
+        MemoryCopy(win32_framebuffer.pixels, output.pixels, sizeof(u32) * win32_framebuffer.width * win32_framebuffer.height);
 
         //
         // NOTE(nick): present framebuffer
@@ -337,13 +444,15 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_inst, LPSTR argv, int ar
         {
             RECT wr = {0};
             GetClientRect(hwnd, &wr);
-            int width = (int)(wr.right - wr.left);
-            int height = (int)(wr.bottom - wr.top);
+            int window_width = (int)(wr.right - wr.left);
+            int window_height = (int)(wr.bottom - wr.top);
 
             Win32_Framebuffer *framebuffer = &win32_framebuffer;
 
+            Rectangle2i dest_rect = aspect_ratio_fit(320, 240, window_width, window_height);
+
             StretchDIBits(hdc,
-                0, 0, width, height,
+                dest_rect.x0, dest_rect.y0, r2i_width(dest_rect), r2i_height(dest_rect),
                 0, 0, framebuffer->width, framebuffer->height, framebuffer->pixels,
                 &framebuffer->bitmap_info,
                 DIB_RGB_COLORS, SRCCOPY);
