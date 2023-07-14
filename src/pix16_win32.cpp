@@ -466,8 +466,44 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_inst, LPSTR argv, int ar
 
     ShowWindow(hwnd, SW_SHOW);
 
+    f64 then = os_time();
+    f64 accumulator = 0.0;
+    f64 average_dt = 0.0;
+    f64 min_dt = 0.0;
+    f64 max_dt = 0.0;
+    i64 frame_index = 0;
+
     while (true)
     {
+        //f64 target_dt = (1.0 / window_get_refresh_rate(window));
+        f64 target_dt = (1.0 / 60.0);
+
+        f64 now = os_time();
+        f64 dt = now - then;
+        then = now;
+
+        // Debug frame timings
+        {
+            if (frame_index % 100 == 10)
+            {
+                min_dt = dt;
+                max_dt = dt;
+            }
+
+            average_dt = 0.9 * average_dt + 0.1 * dt;
+            min_dt = min_f64(min_dt, dt);
+            max_dt = max_f64(max_dt, dt);
+
+            frame_index += 1;
+
+            String debug_fps = sprint("%02dms | %02dms | %02dms", (i32)(min_dt * 1000), (i32)(average_dt * 1000), (i32)(max_dt * 1000));
+            char *title_c = string_to_cstr(temp_arena(), debug_fps);
+            SetWindowTextA(hwnd, title_c);
+        }
+
+        // NOTE(nick): clamp large spikes in framerate
+        if (dt > 0.25) dt = 0.25;
+
         // NOTE(nick): poll for events
         for (;;) {
             MSG msg = {};
@@ -543,11 +579,36 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_inst, LPSTR argv, int ar
                 &framebuffer->bitmap_info,
                 DIB_RGB_COLORS, SRCCOPY);
 
-            SwapBuffers(hdc);
+            //SwapBuffers(hdc);
         }
 
-        // @Incomplete: actually do proper frame-rate timing
-        os_sleep(16 / 1000.0);
+        now = os_time();
+        f64 remaining_seconds = target_dt - (now - then);
+
+        // NOTE(nick): wait for next frame
+        b32 window_is_focused = (GetForegroundWindow() == hwnd);
+        if (window_is_focused)
+        {
+            while (now - then < target_dt)
+            {
+                now = os_time();
+
+                f64 wait_s = target_dt - (now - then);
+                if (wait_s > 2.0 / 1000.0)
+                {
+                    // NOTE(nick): sleep for 80% of the time to account for sleep inaccuracies
+                    os_sleep(wait_s * 0.8);
+                }
+            }
+        }
+        else
+        {
+            // NOTE(nick): we're in the background so we don't have to care too much about exact timing.
+            now = os_time();
+            if (now - then < target_dt) {
+                os_sleep(target_dt);
+            }
+        }
     }
 
     os_exit(0);
