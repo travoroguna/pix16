@@ -650,8 +650,8 @@ function bool string_contains(String str, String search);
 
 // Allocation
 function String string_copy(Arena *arena, String str);
-function String string_printv(Arena *arena, char *fmt, va_list args);
-function String string_print(Arena *arena, char *fmt, ...);
+function String string_printv(Arena *arena, const char *fmt, va_list args);
+function String string_print(Arena *arena, const char *fmt, ...);
 #define PushStringCopy(arena, str) string_copy(arena, str)
 #define PushStringFV(arena, fmt, args) string_printv(arena, fmt, args)
 #define PushStringF(arena, fmt, ...) string_print(arena, fmt, __VA_ARGS__)
@@ -1886,7 +1886,7 @@ function String string_copy(Arena *arena, String str)
     return copy;
 }
 
-function String string_printv(Arena *arena, char *fmt, va_list args)
+function String string_printv(Arena *arena, const char *fmt, va_list args)
 {
     String result = {0};
     
@@ -1929,7 +1929,7 @@ function String string_printv(Arena *arena, char *fmt, va_list args)
     return result;
 }
 
-function String string_print(Arena *arena, char *fmt, ...)
+function String string_print(Arena *arena, const char *fmt, ...)
 {
     String result = {0};
 
@@ -3837,7 +3837,7 @@ function bool os_shell_execute(String cmd, String arguments, bool admin) {
     String16 cmd_w = string16_from_string(scratch.arena, cmd);
     String16 arguments_w = string16_from_string(scratch.arena, arguments);
 
-    WCHAR *verb = admin ? L"runas" : L"open";
+    WCHAR *verb = const_cast<WCHAR *>(admin ? L"runas" : L"open");
 
     // If the function succeeds, it returns a value greater than 32.
     bool success = (INT_PTR)_ShellExecuteW(0, verb, (WCHAR *)cmd_w.data, (WCHAR *)arguments_w.data, 0, SW_HIDE) > 32;

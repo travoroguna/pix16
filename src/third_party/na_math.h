@@ -102,7 +102,7 @@ typedef void VoidFunction(void);
 
 #define SQRT_2 0.70710678118
 
-#define Mod(x, y) fmodf(x, y)
+#define Modf(x, y) fmodf(x, y)
 #define AbsF32(x) fabsf(x)
 #define Sqrt(x) sqrtf(x)
 #define Sin(x) sinf(x)
@@ -1875,16 +1875,16 @@ function f32 min(f32 a, f32 b) { return min_f32(a, b); }
 function f32 max(f32 a, f32 b) { return max_f32(a, b); }
 function f32 clamp(f32 value, f32 lower, f32 upper) { return clamp_f32(value, lower, upper); }
 function f32 sign(f32 x) { return sign_f32(x); }
-function f32 abs(f32 x) { return abs_f32(x); }
-function f32 round(f32 x) { return round_f32(x); }
-function f32 floor(f32 x) { return floor_f32(x); }
-function f32 ceil(f32 x) { return ceil_f32(x); }
+//function f32 abs(f32 x) { return abs_f32(x); }
+//function f32 round(f32 x) { return round_f32(x); }
+//function f32 floor(f32 x) { return floor_f32(x); }
+//function f32 ceil(f32 x) { return ceil_f32(x); }
 
-function f32 sin(f32 x) { return sin_f32(x); }
-function f32 cos(f32 x) { return cos_f32(x); }
-function f32 tan(f32 x) { return tan_f32(x); }
-function f32 atan2(f32 y, f32 x) { return atan2_f32(y, x); }
-function f32 acos(f32 x) { return acos_f32(x); }
+//function f32 sin(f32 x) { return sin_f32(x); }
+//function f32 cos(f32 x) { return cos_f32(x); }
+//function f32 tan(f32 x) { return tan_f32(x); }
+//function f32 atan2(f32 y, f32 x) { return atan2_f32(y, x); }
+//function f32 acos(f32 x) { return acos_f32(x); }
 
 function f32 lerp(f32 a, f32 b, f32 t) { return lerp_f32(a, b, t); }
 function f32 unlerp(f32 a, f32 b, f32 v) { return unlerp_f32(a, b, v); }
@@ -2009,7 +2009,7 @@ function Vector3 rgb_from_hsv(Vector3 hsv)
             v -= 10 * 1e-6f;
         }
         
-        h = Mod(h, 1.f) / (60.f/360.f);
+        h = Modf(h, 1.f) / (60.f/360.f);
         int i = (int)h;
         f32 f = h - (f32)i;
         f32 p = v * (1.0f - s);

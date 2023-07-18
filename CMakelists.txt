@@ -1,0 +1,34 @@
+cmake_minimum_required(VERSION 3.22)
+project(pix16)
+
+
+set(CMAKE_CXX_STANDARD 23)
+include(cmake/CPM.cmake)
+
+
+CPMAddPackage(
+        NAME bond
+        GITHUB_REPOSITORY travoroguna/bond
+        GIT_TAG v0.0.0
+        EXCLUDE_FROM_ALL YES
+        GIT_SHALLOW ON
+)
+
+
+if (bond_ADDED)
+    target_include_directories(bond-lib INTERFACE ${bond_SOURCE_DIR}/src)
+endif()
+
+
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+    enable_language("RC")
+    set(WIN32_RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/assets/resources.rc)
+    add_executable(pix16 WIN32 src/pix16_win32.cpp ${WIN32_RESOURCES})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Od -Oi -Zo -FC -Z7 -fp:fast -fp:except- /Zc:strictStrings- -Gm- -GR -GS- -Gs9999999")
+else ()
+    add_executable(pix16 src/pix16.cpp)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations -Wno-int-to-void-pointer-cast -Wno-writable-strings -Wno-dangling-else -Wno-switch -Wno-undefined-internal -Wno-logical-op-parentheses")
+endif()
+
+
+target_link_libraries(pix16 bond-lib)

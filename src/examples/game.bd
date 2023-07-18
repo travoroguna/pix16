@@ -1,0 +1,47 @@
+import "core";
+import "core:pix16";
+
+var color = pix16.Vec4(1.0, 0.0, 0.0, 1.0);
+
+struct Ball{
+    var pos;
+    var dir;
+    var speed;
+    var radius;
+
+    fn new() {
+        return Ball(pix16.Vec2(0.0, 0.0), pix16.Vec2(1.0, 1.0), 1.0, 20.0);
+    }
+
+    fn update(self) {
+        self.pos.x = self.pos.x + self.dir.x * self.speed;
+        self.pos.y = self.pos.y + self.dir.y * self.speed;
+
+        if self.pos.x + self.radius >= pix16.width {
+            self.dir.x = -1.0;
+        } else if self.pos.x <= 0.0 {
+            self.dir.x = 1.0;
+        }
+
+        if self.pos.y + self.radius >= pix16.height {
+            self.dir.y = -1.0;
+        } else if self.pos.y <= 0.0 {
+            self.dir.y = 1.0;
+        }
+    }
+
+    fn draw(self) {
+        pix16.draw_circle(pix16.window, self.pos, self.radius, color);
+    }
+}
+
+var ball = Ball.new();
+
+fn update() {
+    pix16.show_text(pix16.window, core.to_string(ball.pos), pix16.Vec2(20.0, 20.0), color);
+    ball.update();
+}
+
+fn draw() {
+    ball.draw();
+}
